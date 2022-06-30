@@ -12,7 +12,7 @@
 enum Compute<'a> {
     Two(&'a str, &'a str),
     One(&'a str),
-    None,
+    Nothing,
 }
 
 fn gen_trivial<'a>(x: Compute<'a>) -> impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)> {
@@ -37,6 +37,18 @@ fn bind<'a>(
     }
 }
 
+fn alt<'a>(parsers: Vec<impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)>>) -> impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)> {
+    move |text: &'a str| {
+        for parser in parsers.iter() {
+            let r = parser(text);
+            if r.is_some() {
+                return r;
+            }
+        }
+        return None;
+    }
+}
+
 fn main() {
     let parse_two_digit_number = 
                  bind(parse_digit, move |d1| {
@@ -46,7 +58,7 @@ fn main() {
                     return Box::new(gen_trivial(Compute::Two(a, b)));
                 }
             }
-            return Box::new(gen_trivial(Compute::None));
+            return Box::new(gen_trivial(Compute::Nothing));
         }))
     });
 }
@@ -67,7 +79,7 @@ mod tests {
                         return Box::new(gen_trivial(Compute::Two(a, b)));
                     }
                 }
-                return Box::new(gen_trivial(Compute::None));
+                return Box::new(gen_trivial(Compute::Nothing));
             }))
         });
         
