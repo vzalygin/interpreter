@@ -1,23 +1,6 @@
-// fn gen_parse_char<'a>(x: &'a str) -> impl Fn(&'a str) -> Option<(&'a str, &'a str)> {
-//     |text: &'a str| {
-//         if text.len() > 0 && text[0..1] == *x {
-//             Some((&text[0..1], &text[1..]))
-//         } else {
-//             None
-//         }
-//     }
-// }
+mod parser;
 
-#[derive(Clone, Copy, Debug)]
-enum Compute<'a> {
-    Two(&'a str, &'a str),
-    One(&'a str),
-    Nothing,
-}
-
-fn gen_trivial<'a>(x: Compute<'a>) -> impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)> {
-    move |text: &'a str| Some((x, text))
-}
+use parser::*;
 
 fn parse_digit<'a>(text: &'a str) -> Option<(Compute<'a>, &'a str)> {
     if text.len() > 0 && text[0..1].parse::<u8>().is_ok() {
@@ -27,40 +10,8 @@ fn parse_digit<'a>(text: &'a str) -> Option<(Compute<'a>, &'a str)> {
     }
 }
 
-fn bind<'a>(
-    parse: impl Fn(&'a str) -> Option<(Compute, &'a str)>,
-    gen: impl Fn(Compute<'a>) -> Box<dyn Fn(&'a str) -> Option<(Compute<'a>, &'a str)>>,
-) -> impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)> {
-    move |text: &'a str| match parse(text) {
-        Some((value, tail)) => gen(value)(tail),
-        None => None,
-    }
-}
-
-fn alt<'a>(parsers: Vec<impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)>>) -> impl Fn(&'a str) -> Option<(Compute<'a>, &'a str)> {
-    move |text: &'a str| {
-        for parser in parsers.iter() {
-            let r = parser(text);
-            if r.is_some() {
-                return r;
-            }
-        }
-        return None;
-    }
-}
-
 fn main() {
-    let parse_two_digit_number = 
-                 bind(parse_digit, move |d1| {
-        Box::new(bind(parse_digit, move |d2| {
-            if let Compute::One(a) = d1 {
-                if let Compute::One(b) = d2 {
-                    return Box::new(gen_trivial(Compute::Two(a, b)));
-                }
-            }
-            return Box::new(gen_trivial(Compute::Nothing));
-        }))
-    });
+    
 }
 
 #[cfg(test)]
@@ -69,10 +20,9 @@ mod tests {
 
     #[test]
     fn test() {
-        let data = "12  ";
+        let data = "12 23 ";
 
-        let parse_two_digit_number = 
-                     bind(parse_digit, move |d1| {
+        let parse_two_digit_number = bind(parse_digit, move |d1| {
             Box::new(bind(parse_digit, move |d2| {
                 if let Compute::One(a) = d1 {
                     if let Compute::One(b) = d2 {
@@ -82,7 +32,7 @@ mod tests {
                 return Box::new(gen_trivial(Compute::Nothing));
             }))
         });
-        
+
         let res = parse_two_digit_number(data);
         assert!(res.is_some());
 
@@ -90,7 +40,7 @@ mod tests {
         assert_eq!(&data[2..], tail);
         assert!(match value {
             Compute::Two(a, b) => a == &data[0..1] && b == &data[1..2],
-            _ => false
+            _ => false,
         })
     }
 }
