@@ -1,28 +1,23 @@
 #![feature(let_chains)]
 
-use std::any::type_name;
-
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Node,
     Number(i32),
     Word(String),
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct Node {
-    children: Vec<Token>,
+    child: Token,
     tail: String,
 }
 
 impl Node {
-    fn from_many(children: Vec<Token>, tail: String) -> Node {
-        Node { children, tail }
-    }
-
-    fn from_one(child: Token, tail: String) -> Node {
+    fn new(child: Token, tail: String) -> Node {
         Node { 
-            children: vec![child],
+            child,
             tail
         }
     }
@@ -31,7 +26,7 @@ impl Node {
 type ParsingResult = Result<Node, ()>;
 type Parser = Box<dyn Fn(String) -> ParsingResult>;
 type FromStringGenerator = Box<dyn Fn(String) -> Parser>;
-type FromTokenGenerator = Box<dyn Fn(Vec<Token>) -> Parser>;
+type FromTokenGenerator = Box<dyn Fn(Token) -> Parser>;
 
 fn boxed<T>(x: T) -> Box<T> {
     Box::new(x)
@@ -40,7 +35,7 @@ fn boxed<T>(x: T) -> Box<T> {
 fn parse_spaces(text: String) -> ParsingResult {
     for (i, x) in text.chars().enumerate() {
         if x != " ".chars().next().unwrap() {
-            return Result::Ok(Node::from_one(
+            return Result::Ok(Node::new(
                 Token::Number(i as i32),
                 text[i..].to_string(),
             ));
@@ -52,7 +47,7 @@ fn parse_spaces(text: String) -> ParsingResult {
 fn parse_digit(text: String) -> ParsingResult {
     if text.len() > 0 {
         if let Ok(x) = text.chars().next().unwrap().to_string().parse::<i32>() {
-            return Result::Ok(Node::from_one(
+            return Result::Ok(Node::new(
                 Token::Number(x), 
                 text[1..].to_string()
             ));
@@ -66,17 +61,21 @@ fn gen_parse_char(x: char) -> Parser {
         let mut it = text.chars();
         let text = it.next();
         if let Some(e) = text {
-            Result::Ok(Node::from_one(Token::Word(e.to_string()), it.collect()))
+            Result::Ok(Node::new(Token::Word(e.to_string()), it.collect()))
         } else {
             Result::Err(())
         }
     })
 }
 
-fn gen_trivial(x: String) -> Parser {
+fn gen_fin(x: Token) -> Parser {
     boxed(move |text: String| {
         let x = x.clone();
-        Result::Ok(Node::from_one(Token::Word(x), text))
+        if let Token::None = x {
+            Result::Err(())
+        } else {
+            Result::Ok(Node::new(x, text))
+        }
     })
 }
 
@@ -85,7 +84,7 @@ fn bind(parse: Parser, gen: FromTokenGenerator) -> Parser {
         let res = parse(text);
 
         if let Ok(x) = res {
-            (gen(x.children))(x.tail)
+            (gen(x.child))(x.tail)
         } else {
             Result::Err(())
         }
@@ -99,8 +98,8 @@ mod tests {
     #[test]
     fn parse_spaces_test() {
         let text = "  1".to_string();
-        let exp = Node::from_many(
-            vec![Token::Number(2)],
+        let exp = Node::new(
+            Token::Number(2),
             "1".to_string()
         );
 
@@ -113,8 +112,8 @@ mod tests {
     #[test]
     fn gen_parse_char_test() {
         let text = "123".to_string();
-        let exp = Node::from_many(
-            vec![Token::Word("1".to_string())],
+        let exp = Node::new(
+            Token::Word("1".to_string()),
             "23".to_string()
         );
 
@@ -127,19 +126,21 @@ mod tests {
 
     #[test]
     fn parse_two_digit_test() {
-        let text = "123".to_string();
-        let exp = Node::from_one(Token::Number(12), "3".to_string());
+        let text = "143".to_string();
+        let exp = Node::new(Token::Number(14), "3".to_string());
 
         let parser = 
-            bind(boxed(parse_digit), boxed(|x| {
-            bind(boxed(parse_digit), boxed(|y| {
-                let x = x[0];
-                let y = y[0];
+            bind(boxed(parse_digit), boxed(move |x| {
+            bind(boxed(parse_digit), boxed(move |y| {
                 if let Token::Number(x) = x && let Token::Number(y) = y {
-                    Result::Ok(Token::Number(x*10 + y))   
+                    gen_fin(Token::Number(x*10 + y))
                 } else {
-                    Result::Err(())
+                    gen_fin(Token::None)
                 }
             }))}));
+        let act = parser(text);
+
+        assert!(act.is_ok());
+        assert_eq!(act.unwrap(), exp);
     }
 }
