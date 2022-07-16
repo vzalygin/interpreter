@@ -25,8 +25,8 @@ impl Node {
 
 type ParsingResult = Result<Node, ()>;
 type Parser = Box<dyn Fn(String) -> ParsingResult>;
-type FromStringGenerator = Box<dyn Fn(String) -> Parser>;
-type FromTokenGenerator = Box<dyn Fn(Token) -> Parser>;
+type Generator = Box<dyn Fn(String) -> Parser>;
+type TokenGenerator = Box<dyn Fn(Token) -> Parser>;
 
 fn boxed<T>(x: T) -> Box<T> {
     Box::new(x)
@@ -79,7 +79,7 @@ fn gen_fin(x: Token) -> Parser {
     })
 }
 
-fn bind(parse: Parser, gen: FromTokenGenerator) -> Parser {
+fn bind(parse: Parser, gen: TokenGenerator) -> Parser {
     boxed(move |text| -> ParsingResult {
         let res = parse(text);
 
